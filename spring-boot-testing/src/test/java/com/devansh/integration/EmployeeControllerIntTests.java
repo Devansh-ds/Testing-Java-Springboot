@@ -1,21 +1,15 @@
-package com.devansh.controller;
+package com.devansh.integration;
 
-import com.devansh.exception.ResourceNotFoundException;
 import com.devansh.model.Employee;
-import com.devansh.service.EmployeeService;
+import com.devansh.repo.EmployeeRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hamcrest.CoreMatchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
-import org.mockito.BDDMockito;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -26,46 +20,34 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import java.util.ArrayList;
 import java.util.List;
 
-@WebMvcTest(EmployeeController.class)
-@Import(EmployeeControllerTest.MockedServiceConfig.class)
-public class EmployeeControllerTest {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
+public class EmployeeControllerIntTests {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
-    private EmployeeService employeeService;
-
-    @TestConfiguration
-    static class MockedServiceConfig {
-        @Bean
-        public EmployeeService employeeService() {
-            return Mockito.mock(EmployeeService.class);
-        }
-    }
+    private EmployeeRepository employeeRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
 
-    private Employee employee;
-
     @BeforeEach
-    public void setUp() {
-        employee = Employee.builder()
-                .firstName("Devansh")
-                .lastName("Singla")
-                .email("d@gmail.com")
-                .build();
-        Mockito.reset(employeeService);
+    void setup() {
+        employeeRepository.deleteAll();
     }
 
     @DisplayName("Create Employee")
     @Test
     public void createEmployeeTest() throws Exception {
         // given
-        BDDMockito.given(employeeService.saveEmployee(ArgumentMatchers.any(Employee.class)))
-                .willAnswer((invocation -> invocation.getArgument(0)
-                ));
+        Employee employee = Employee.builder()
+                .firstName("Devansh")
+                .lastName("Singla")
+                .email("d@gmail.com")
+                .build();
+
         // when
         ResultActions response = mockMvc.perform(MockMvcRequestBuilders
                 .post("/api/employees")
@@ -83,7 +65,6 @@ public class EmployeeControllerTest {
                         .jsonPath("$.lastName", CoreMatchers.is(employee.getLastName())))
                 .andExpect(MockMvcResultMatchers
                         .jsonPath("$.email", CoreMatchers.is(employee.getEmail())));
-
     }
 
     @DisplayName("Get all employees")
@@ -91,11 +72,9 @@ public class EmployeeControllerTest {
     public void getAllEmployeesTest() throws Exception {
         // given
         List<Employee> employeeList = new ArrayList<>();
-        employeeList.add(employee);
+        employeeList.add(Employee.builder().firstName("Devansh").lastName("Singla").email("ds@gmail.com").build());
         employeeList.add(Employee.builder().firstName("Aman").lastName("Kumar").email("aman@gmail.com").build());
-
-        BDDMockito.given(employeeService.getAllEmployees())
-                .willReturn(employeeList);
+        employeeRepository.saveAll(employeeList);
 
         // when
         ResultActions response = mockMvc.perform(MockMvcRequestBuilders
@@ -114,18 +93,16 @@ public class EmployeeControllerTest {
     @Test
     public void getEmployeeByIdTest() throws Exception {
         // given
-        Employee employee2 = Employee.builder()
-                .id(1L)
+        Employee employee = Employee.builder()
                 .firstName("Devansh")
                 .lastName("Singla")
                 .email("d@gmail.com")
                 .build();
-        BDDMockito.given(employeeService.getEmployeeById(ArgumentMatchers.anyLong()))
-                .willReturn(employee2);
+        Employee savedEmployee = employeeRepository.save(employee);
 
         // when
         ResultActions response = mockMvc.perform(MockMvcRequestBuilders
-                .get("/api/employees/" + employee2.getId())
+                .get("/api/employees/" + employee.getId())
                 .accept(MediaType.APPLICATION_JSON)
         );
 
@@ -134,7 +111,7 @@ public class EmployeeControllerTest {
                 .andDo(MockMvcResultHandlers.print())
                 .andExpect(MockMvcResultMatchers.status().isOk())
                 .andExpect(MockMvcResultMatchers
-                        .jsonPath("$.email", CoreMatchers.is(employee2.getEmail()))
+                        .jsonPath("$.email", CoreMatchers.is(employee.getEmail()))
                 );
     }
 
@@ -142,12 +119,11 @@ public class EmployeeControllerTest {
     @Test
     public void getEmployeeByIdExceptionTest() throws Exception {
         // given
-        BDDMockito.given(employeeService.getEmployeeById(ArgumentMatchers.anyLong()))
-                .willThrow(ResourceNotFoundException.class);
+        // No employee is in the database
 
         // when
         ResultActions response = mockMvc.perform(MockMvcRequestBuilders
-                .get("/api/employees/" + employee.getId()));
+                .get("/api/employees/" + 1));
 
         // then
         response
@@ -159,18 +135,22 @@ public class EmployeeControllerTest {
     @Test
     public void updateEmployeeByIdTest() throws Exception {
         // given
+        Employee employee = Employee.builder()
+                .firstName("Devansh")
+                .lastName("Singla")
+                .email("d@gmail.com")
+                .build();
+        Employee savedEmployee = employeeRepository.save(employee);
+
         String newEmail = "new@gmail.com";
-        BDDMockito.given(employeeService.updateEmployee(ArgumentMatchers.any(Employee.class)))
-                .willAnswer(invocation -> {
-                    employee.setEmail(newEmail);
-                    return employee;
-                });
+        savedEmployee.setEmail(newEmail);
+
 
         // when
         ResultActions response = mockMvc.perform(MockMvcRequestBuilders
-                .put("/api/employees/" + employee.getId())
+                .put("/api/employees/" + savedEmployee.getId())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(employee))
+                .content(objectMapper.writeValueAsString(savedEmployee))
         );
 
         // then
@@ -186,8 +166,14 @@ public class EmployeeControllerTest {
     @Test
     public void updateEmployeeByIdExceptionTest() throws Exception {
         // given
-        BDDMockito.given(employeeService.updateEmployee(ArgumentMatchers.any(Employee.class)))
-                .willThrow(ResourceNotFoundException.class);
+        Employee employee = Employee.builder()
+                .firstName("Devansh")
+                .lastName("Singla")
+                .email("d@gmail.com")
+                .build();
+        String newEmail = "new@gmail.com";
+        // employeeRepository.save(employee);   we never saved it so it should give notFound Exception
+        employee.setEmail(newEmail);
 
         // when
         ResultActions response = mockMvc.perform(MockMvcRequestBuilders
@@ -206,20 +192,24 @@ public class EmployeeControllerTest {
     @Test
     public void deleteEmployeeByIdTest() throws Exception {
         // given
-        BDDMockito
-                .willDoNothing()
-                .given(employeeService)
-                .deleteEmployee(ArgumentMatchers.anyLong());
+        Employee employee = Employee.builder()
+                .firstName("Devansh")
+                .lastName("Singla")
+                .email("d@gmail.com")
+                .build();
+        Employee savedEmployee = employeeRepository.save(employee);
 
         // when
         ResultActions response = mockMvc.perform(MockMvcRequestBuilders
-                .delete("/api/employees/" + employee.getId())
+                .delete("/api/employees/" + savedEmployee.getId())
         );
 
         // then
         response.andExpect(MockMvcResultMatchers.status().isOk());
 
     }
+
+
 
 }
 

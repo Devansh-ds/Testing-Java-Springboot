@@ -41,5 +41,20 @@ public class EmployeeController {
         }
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<Employee> updateEmployee(@PathVariable long id, @RequestBody Employee employee) {
+        try {
+            return ResponseEntity.ok(employeeService.updateEmployee(employee));
+        } catch (ResourceNotFoundException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deleteEmployee(@PathVariable long id) {
+        employeeService.deleteEmployee(id);
+        return ResponseEntity.ok("Employee deleted successfully");
+    }
+
 
 }
